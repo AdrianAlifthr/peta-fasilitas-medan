@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peta Fasilitas Publik Kota Medan — SIG Web Tahap 1</title>
+<meta name="description" content="Peta interaktif Leaflet fasilitas publik Kota Medan (SDG 9 dan SDG 11).">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --bg:#f4f7fb; --card:#ffffff; --txt:#14213d; --muted:#4a5a75; --line:#d3dbe8;
+    --brand:#0b5c8f; --brand-dark:#084468;
+    --kesehatan:#c62828; --pendidikan:#1565c0; --rth:#2e7d32; --transportasi:#e65100; --budaya:#6a1b9a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt);line-height:1.55}
+  header{background:var(--brand-dark);color:#fff;padding:16px 16px 14px}
+  header h1{font-size:1.25rem;line-height:1.25}
+  header p{font-size:.88rem;margin-top:4px;max-width:820px;color:#e3eefa}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .tags span{font-size:.72rem;font-weight:700;border:1px solid #9ec4e3;border-radius:999px;padding:2px 10px}
+  main{display:grid;grid-template-columns:340px 1fr;gap:12px;padding:12px;max-width:1280px;margin:0 auto}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .panel h2{font-size:.95rem}
+  label.sr{position:absolute;left:-9999px}
+  input[type=search]{width:100%;padding:9px 11px;border:1px solid #8a99b3;border-radius:8px;font:inherit;font-size:.9rem;color:var(--txt);background:#fff}
+  input[type=search]:focus,button:focus-visible{outline:3px solid #ffbf47;outline-offset:1px}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  button{font:inherit;font-size:.85rem;font-weight:700;cursor:pointer;background:var(--brand);color:#fff;border:1px solid var(--brand-dark);border-radius:8px;padding:8px 12px}
+  button:hover{background:var(--brand-dark)}
+  button.alt{background:#fff;color:var(--brand-dark)}
+  button.alt:hover{background:#e8f1f8}
+  #list{list-style:none;display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+  #list button{width:100%;text-align:left;background:#fff;color:var(--txt);border:1px solid var(--line);font-weight:600;display:flex;gap:8px;align-items:center}
+  #list button:hover{background:#eef4fa}
+  .dot{flex:0 0 12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #5a6b86}
+  .sub{display:block;font-weight:400;font-size:.76rem;color:var(--muted)}
+  #info{font-size:.84rem;background:#eef4fa;border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:44px}
+  #info ul{margin:6px 0 0 18px}
+  #wrap{position:relative;min-width:0}
+  #map{height:min(78vh,640px);min-height:380px;border:1px solid var(--line);border-radius:12px;z-index:1}
+  .legend{background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #8a99b3;font-size:.78rem;line-height:1.7;color:var(--txt)}
+  .legend b{display:block;margin-bottom:2px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:2px solid #fff;box-shadow:0 0 0 1px #5a6b86}
+  .leaflet-popup-content h3{font-size:.95rem;margin-bottom:2px;color:var(--brand-dark)}
+  .leaflet-popup-content p{margin:2px 0;font-size:.82rem}
+  footer{padding:14px 16px 24px;text-align:center;font-size:.78rem;color:var(--muted)}
+  @media(max-width:820px){
+    main{grid-template-columns:1fr}
+    #wrap{order:-1}
+    #map{height:62vh;min-height:340px}
+  }
+  @media(max-width:420px){header h1{font-size:1.1rem}button{flex:1 1 auto}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Peta Fasilitas Publik Kota Medan</h1>
+  <p>Peta interaktif yang memetakan infrastruktur dan fasilitas kota menurut tujuan pembangunan berkelanjutan: <b>SDG 9</b> (transportasi dan pendidikan/riset sebagai infrastruktur dan inovasi) serta <b>SDG 11</b> (layanan kesehatan, ruang terbuka hijau, dan warisan budaya). Cari fasilitas terdekat dan ukur akses layanan dari lokasi Anda.</p>
+  <div class="tags"><span>SDG 9 · Infrastruktur</span><span>SDG 11 · Kota Berkelanjutan</span><span>Leaflet 1.9.4</span></div>
+</header>
+
+<main>
+  <aside class="panel" aria-label="Panel kontrol">
+    <div>
+      <h2>Tampilkan menurut SDG</h2>
+      <div class="btns" id="sdgFilter" role="group" aria-label="Filter menurut SDG" style="margin-top:6px"></div>
+      <p id="sdgNote" style="font-size:.8rem;color:var(--muted);margin-top:6px"></p>
+    </div>
+    <div>
+      <h2>Cari fasilitas</h2>
+      <label class="sr" for="q">Cari nama fasilitas</label>
+      <input id="q" type="search" placeholder="Ketik nama fasilitas…" autocomplete="off">
+    </div>
+    <ul id="list" aria-label="Daftar fasilitas"></ul>
+    <div>
+      <h2>Fasilitas terdekat</h2>
+      <p style="font-size:.8rem;color:var(--muted);margin:2px 0 8px">Gunakan lokasi Anda, atau klik titik mana saja pada peta sebagai titik acuan.</p>
+      <div class="btns">
+        <button id="btnLocate" type="button">Lokasi saya</button>
+        <button id="btnClear" type="button" class="alt">Hapus titik acuan</button>
+      </div>
+    </div>
+    <div id="info" role="status" aria-live="polite">Belum ada titik acuan.</div>
+  </aside>
+
+  <div id="wrap">
+    <div id="map" role="application" aria-label="Peta interaktif fasilitas publik Kota Medan"></div>
+  </div>
+</main>
+
+<footer>
+  Data: koordinat perkiraan hasil digitasi manual untuk keperluan pembelajaran. Peta dasar © kontributor OpenStreetMap dan © CARTO. Dibuat dengan Leaflet.
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  /* ---------- 1. Data spasial (GeoJSON) ---------- */
+  var KATEGORI = {
+    kesehatan:    {label:'Kesehatan',            warna:'#c62828', sdg:11, target:'Target 11.1 — akses layanan dasar bagi warga kota'},
+    pendidikan:   {label:'Pendidikan',           warna:'#1565c0', sdg:9,  target:'Target 9.5 — riset ilmiah, inovasi, dan kapabilitas teknologi'},
+    rth:          {label:'Ruang Terbuka Hijau',  warna:'#2e7d32', sdg:11, target:'Target 11.7 — akses ke ruang publik yang hijau dan terbuka'},
+    transportasi: {label:'Transportasi',         warna:'#e65100', sdg:9,  target:'Target 9.1 — infrastruktur andal dan tangguh (mendukung juga target 11.2 transportasi)'},
+    budaya:       {label:'Situs Budaya',         warna:'#6a1b9a', sdg:11, target:'Target 11.4 — pelindungan warisan budaya'}
+  };
+  var SDG_NAMA = {9:'SDG 9 · Industri, Inovasi, dan Infrastruktur', 11:'SDG 11 · Kota dan Permukiman Berkelanjutan'};
+  var RADIUS_AKSES = 3000; // meter, batas jangkauan untuk indikator akses layanan
+
+  function f(nama, kat, lat, lng, ket){
+    return {type:'Feature',
+      geometry:{type:'Point', coordinates:[lng, lat]},   // GeoJSON: [bujur, lintang]
+      properties:{nama:nama, kategori:kat, keterangan:ket}};
+  }
+
+  var DATA = {type:'FeatureCollection', features:[
+    f('RSUP H. Adam Malik','kesehatan',3.5186,98.6019,'Rumah sakit rujukan utama wilayah Sumatera bagian utara.'),
+    f('RSUD Dr. Pirngadi','kesehatan',3.5810,98.6900,'Rumah sakit umum daerah milik Pemerintah Kota Medan.'),
+    f('Universitas Sumatera Utara','pendidikan',3.5650,98.6566,'Perguruan tinggi negeri di kawasan Padang Bulan.'),
+    f('Politeknik Negeri Medan','pendidikan',3.5608,98.6581,'Perguruan tinggi vokasi di kawasan Padang Bulan.'),
+    f('Universitas Negeri Medan','pendidikan',3.6147,98.7120,'Perguruan tinggi negeri, kampus Medan Estate.'),
+    f('Lapangan Merdeka','rth',3.5878,98.6785,'Ruang terbuka publik di pusat kota, dikelilingi bangunan bersejarah.'),
+    f('Taman Beringin','rth',3.5877,98.6641,'Taman kota untuk rekreasi dan olahraga warga.'),
+    f('Stasiun Kereta Api Medan','transportasi',3.5925,98.6760,'Simpul kereta api utama di pusat kota.'),
+    f('Terminal Amplas','transportasi',3.5436,98.7064,'Terminal bus antarkota di selatan kota.'),
+    f('Bandara Kualanamu','transportasi',3.6422,98.8853,'Bandara internasional di Deli Serdang yang melayani wilayah Medan.'),
+    f('Istana Maimun','budaya',3.5750,98.6839,'Istana peninggalan Kesultanan Deli, daya tarik wisata sejarah.'),
+    f('Masjid Raya Al-Mashun','budaya',3.5752,98.6875,'Masjid bersejarah peninggalan Kesultanan Deli.')
+  ]};
+
+  /* ---------- 2. Inisialisasi peta + basemap ---------- */
+  var map = L.map('map', {center:[3.5952,98.6722], zoom:12, zoomControl:true});
+
+  var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  });
+  var carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    maxZoom:20, subdomains:'abcd',
+    attribution:'&copy; OpenStreetMap &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  });
+  osm.addTo(map);
+  L.control.scale({imperial:false}).addTo(map);
+
+  /* ---------- 3. Marker + popup informatif, dikelompokkan per kategori ---------- */
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+  var grup = {}, markerById = [], overlays = {};
+  Object.keys(KATEGORI).forEach(function(k){
+    grup[k] = L.layerGroup().addTo(map);
+    overlays['<span style="color:'+KATEGORI[k].warna+'">●</span> '+KATEGORI[k].label+' <small>(SDG '+KATEGORI[k].sdg+')</small>'] = grup[k];
+  });
+
+  DATA.features.forEach(function(ft, i){
+    var p = ft.properties, c = ft.geometry.coordinates, k = KATEGORI[p.kategori];
+    var m = L.circleMarker([c[1], c[0]], {
+      radius:9, color:'#ffffff', weight:2, fillColor:k.warna, fillOpacity:.95
+    }).bindPopup(
+      '<h3>'+esc(p.nama)+'</h3>'+
+      '<p><b>Kategori:</b> '+esc(k.label)+'</p>'+
+      '<p>'+esc(p.keterangan)+'</p>'+
+      '<p><b>Kaitan SDG:</b> SDG '+k.sdg+' — '+esc(k.target)+'</p>'+
+      '<p><b>Koordinat:</b> '+c[1].toFixed(4)+', '+c[0].toFixed(4)+'</p>'
+    );
+    m.bindTooltip(esc(p.nama), {direction:'top', offset:[0,-8]});
+    m.addTo(grup[p.kategori]);
+    markerById[i] = m;
+  });
+
+  /* ---------- 4. Layer control (2 basemap + 5 layer tematik) ---------- */
+  L.control.layers({'OpenStreetMap':osm, 'CARTO Terang':carto}, overlays, {collapsed:window.innerWidth<600}).addTo(map);
+
+  /* ---------- 5. Legenda ---------- */
+  var legend = L.control({position:'bottomright'});
+  legend.onAdd = function(){
+    var d = L.DomUtil.create('div','legend');
+    var html = '<b>Legenda</b>';
+    [9, 11].forEach(function(s){
+      html += '<div style="font-weight:700;margin-top:3px">SDG '+s+'</div>';
+      Object.keys(KATEGORI).forEach(function(k){
+        if(KATEGORI[k].sdg === s) html += '<div><i style="background:'+KATEGORI[k].warna+'"></i>'+KATEGORI[k].label+'</div>';
+      });
+    });
+    d.innerHTML = html + '<div style="margin-top:3px"><i style="background:#fff;border-color:#14213d"></i>Titik acuan</div>';
+    return d;
+  };
+  legend.addTo(map);
+
+  /* ---------- 6. Daftar fasilitas + pencarian (aksesibel dengan keyboard) ---------- */
+  var listEl = document.getElementById('list'), qEl = document.getElementById('q');
+  function renderList(filter){
+    listEl.innerHTML = '';
+    var q = (filter||'').trim().toLowerCase(), n = 0;
+    DATA.features.forEach(function(ft, i){
+      var p = ft.properties;
+      if(q && p.nama.toLowerCase().indexOf(q) === -1) return;
+      n++;
+      var li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = '<span class="dot" style="background:'+KATEGORI[p.kategori].warna+'"></span><span>'+esc(p.nama)+'<span class="sub">'+esc(KATEGORI[p.kategori].label)+' · SDG '+KATEGORI[p.kategori].sdg+'</span></span>';
+      b.addEventListener('click', function(){
+        if(!map.hasLayer(grup[p.kategori])) grup[p.kategori].addTo(map);
+        var c = ft.geometry.coordinates;
+        map.flyTo([c[1], c[0]], 15, {duration:.8});
+        markerById[i].openPopup();
+      });
+      li.appendChild(b); listEl.appendChild(li);
+    });
+    if(!n){ listEl.innerHTML = '<li style="font-size:.84rem;color:var(--muted)">Tidak ada fasilitas yang cocok.</li>'; }
+  }
+  qEl.addEventListener('input', function(){ renderList(qEl.value); });
+  renderList('');
+
+  /* ---------- 6b. Filter menurut SDG ---------- */
+  var sdgBox = document.getElementById('sdgFilter'), sdgNote = document.getElementById('sdgNote');
+  function hitung(s){ return DATA.features.filter(function(ft){ return s === 'all' || KATEGORI[ft.properties.kategori].sdg === s; }).length; }
+  function tampilkanSdg(s){
+    Object.keys(KATEGORI).forEach(function(k){
+      var on = (s === 'all' || KATEGORI[k].sdg === s);
+      if(on && !map.hasLayer(grup[k])) grup[k].addTo(map);
+      if(!on && map.hasLayer(grup[k])) map.removeLayer(grup[k]);
+    });
+    Array.prototype.forEach.call(sdgBox.children, function(b){
+      var aktif = String(b.getAttribute('data-sdg')) === String(s);
+      b.className = aktif ? '' : 'alt';
+      b.setAttribute('aria-pressed', aktif);
+    });
+    sdgNote.textContent = s === 'all' ? 'Menampilkan semua fasilitas.' : SDG_NAMA[s]+'.';
+  }
+  [['all','Semua'],[9,'SDG 9'],[11,'SDG 11']].forEach(function(o){
+    var b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('data-sdg', o[0]);
+    b.textContent = o[1]+' ('+hitung(o[0])+')';
+    b.addEventListener('click', function(){ tampilkanSdg(o[0]); });
+    sdgBox.appendChild(b);
+  });
+  tampilkanSdg('all');
+
+  /* ---------- 7. Interaksi: titik acuan (klik / geolocation) + fasilitas terdekat ---------- */
+  var infoEl = document.getElementById('info'), acuan = null, akurasi = null, jangkauan = null;
+
+  // Jarak Haversine (meter)
+  function haversine(a, b, c, d){
+    var R = 6371000, r = Math.PI/180;
+    var dp = (c-a)*r, dl = (d-b)*r;
+    var h = Math.sin(dp/2)*Math.sin(dp/2) + Math.cos(a*r)*Math.cos(c*r)*Math.sin(dl/2)*Math.sin(dl/2);
+    return 2*R*Math.asin(Math.sqrt(h));
+  }
+  function fmt(m){ return m < 1000 ? Math.round(m)+' m' : (m/1000).toFixed(2).replace('.',',')+' km'; }
+
+  function setAcuan(latlng, label){
+    if(acuan) map.removeLayer(acuan);
+    acuan = L.circleMarker(latlng, {radius:8, color:'#14213d', weight:3, fillColor:'#ffffff', fillOpacity:1}).addTo(map);
+    var out = '<b>'+esc(label)+'</b> ('+latlng.lat.toFixed(4)+', '+latlng.lng.toFixed(4)+')<br>Fasilitas terdekat per kategori:<ul>';
+    Object.keys(KATEGORI).forEach(function(k){
+      var best = null, bd = Infinity;
+      DATA.features.forEach(function(ft){
+        if(ft.properties.kategori !== k) return;
+        var c = ft.geometry.coordinates, d = haversine(latlng.lat, latlng.lng, c[1], c[0]);
+        if(d < bd){ bd = d; best = ft; }
+      });
+      if(best) out += '<li>'+esc(KATEGORI[k].label)+': <b>'+esc(best.properties.nama)+'</b> — '+fmt(bd)+'</li>';
+    });
+    // Indikator akses (SDG 11): jumlah fasilitas dalam radius jangkauan
+    var dalam = {}, total = 0;
+    DATA.features.forEach(function(ft){
+      var c = ft.geometry.coordinates;
+      if(haversine(latlng.lat, latlng.lng, c[1], c[0]) <= RADIUS_AKSES){ dalam[ft.properties.kategori] = (dalam[ft.properties.kategori]||0)+1; total++; }
+    });
+    var kat = Object.keys(KATEGORI).filter(function(k){ return dalam[k]; }).length;
+    out += '</ul><b>Akses dalam '+(RADIUS_AKSES/1000)+' km (SDG 11):</b> '+total+' fasilitas, mencakup '+kat+' dari '+Object.keys(KATEGORI).length+' kategori.';
+    if(kat < Object.keys(KATEGORI).length){
+      var kurang = Object.keys(KATEGORI).filter(function(k){ return !dalam[k]; }).map(function(k){ return KATEGORI[k].label; });
+      out += '<br>Belum terjangkau: '+kurang.join(', ')+'.';
+    }
+    if(jangkauan) map.removeLayer(jangkauan);
+    jangkauan = L.circle(latlng, {radius:RADIUS_AKSES, color:'#14213d', weight:1, dashArray:'6 4', fillOpacity:.04, interactive:false}).addTo(map);
+    infoEl.innerHTML = out;
+  }
+
+  map.on('click', function(e){ setAcuan(e.latlng, 'Titik acuan'); });
+
+  document.getElementById('btnLocate').addEventListener('click', function(){
+    infoEl.textContent = 'Mencari lokasi Anda…';
+    map.locate({setView:true, maxZoom:15, timeout:10000});
+  });
+  map.on('locationfound', function(e){
+    if(akurasi) map.removeLayer(akurasi);
+    akurasi = L.circle(e.latlng, {radius:e.accuracy, color:'#0b5c8f', weight:1, fillOpacity:.08}).addTo(map);
+    setAcuan(e.latlng, 'Lokasi Anda');
+  });
+  map.on('locationerror', function(e){
+    infoEl.textContent = 'Lokasi tidak dapat diakses ('+e.message+'). Klik pada peta untuk menentukan titik acuan secara manual.';
+  });
+
+  document.getElementById('btnClear').addEventListener('click', function(){
+    if(acuan){ map.removeLayer(acuan); acuan = null; }
+    if(akurasi){ map.removeLayer(akurasi); akurasi = null; }
+    if(jangkauan){ map.removeLayer(jangkauan); jangkauan = null; }
+    infoEl.textContent = 'Belum ada titik acuan.';
+  });
+})();
+</script>
+</body>
+</html>
